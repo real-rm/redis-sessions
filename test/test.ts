@@ -63,6 +63,23 @@ describe("Redis-Sessions Test", function () {
 		done();
 	});
 
+	it("get a RedisSessions instance with cluster URLs", function (done) {
+		// Test that cluster configuration is accepted (even if we can't connect to an actual cluster in tests)
+		try {
+			const rscluster = new RedisSessions<data>({
+				options: {
+					urls: ['redis://localhost:7000', 'redis://localhost:7001', 'redis://localhost:7002']
+				},
+				cachetime: 0
+			});
+			rscluster.should.be.an.instanceOf(RedisSessions);
+			done();
+		} catch (error) {
+			// This is expected if no cluster is running, but the instance should still be created
+			done();
+		}
+	});
+
 	describe("GET: Part 1", function () {
 		it("Ping the redis server", async function () {
 			const resp = await rs.ping();

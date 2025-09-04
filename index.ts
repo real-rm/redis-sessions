@@ -1,7 +1,7 @@
 
 import _ from "lodash";
 
-import { createClient } from "redis";
+import { createClient, createCluster } from "redis";
 
 import type { RedisClientOptions } from "redis";
 
@@ -9,7 +9,7 @@ import { LRUCache } from "lru-cache";
 export type RedisSessionsOptions = {
 	port?: number;
 	host?: string;
-	options?: RedisClientOptions; // maybe something else
+	options?: RedisClientOptions & { urls?: string[] }; // maybe something else
 	namespace?: string;
 	wipe?: number;
 	cachetime?: number;
@@ -84,13 +84,13 @@ class RedisSessions <SessionData extends Record<string, string|boolean|number>> 
 	// to check if the cache is enabled
 	private isCache = false;
 	// redis client
-	private redis: ReturnType<typeof createClient>;
+	private redis: any; // Union of ReturnType<typeof createClient> | ReturnType<typeof createCluster>
 	// lru cache to store sessions
 	private sessionCache: LRUCache<string, Session<SessionData>>|null = null;
 	// deletes sessions from redis based on ttl
 	private wiperInterval: ReturnType<typeof setInterval>|null = null;
 	// redissub is used to wipe cache on set/kill
-	private redissub: ReturnType<typeof createClient>|null = null;
+	private redissub: any = null; // Union of ReturnType<typeof createClient> | ReturnType<typeof createCluster> | null
 	// handles async work of connecting to redis
 	private subscribed: boolean = false;
 	private toSubscribe: Promise<boolean> = Promise.resolve(true);
@@ -103,7 +103,14 @@ class RedisSessions <SessionData extends Record<string, string|boolean|number>> 
 		this.redisns = redisSessionsOptions.namespace ?? "rs";
 		this.redisns += ":";
 
-		if (redisSessionsOptions.options && redisSessionsOptions.options.url) {
+		if (redisSessionsOptions.options && redisSessionsOptions.options.urls) {
+			// Use Redis Cluster if urls array is provided
+			const { urls, ...clusterOptions } = redisSessionsOptions.options;
+			this.redis = createCluster({
+				rootNodes: urls.map(url => ({ url })),
+				defaults: clusterOptions
+			});
+		} else if (redisSessionsOptions.options && redisSessionsOptions.options.url) {
 			this.redis = createClient(redisSessionsOptions.options);
 		} else {
 			this.redis = createClient(_.merge(redisSessionsOptions.options ?? {}, { socket: { port: redisSessionsOptions.port ?? 6379, host: redisSessionsOptions.host ?? "127.0.0.1" } }));
@@ -124,7 +131,16 @@ class RedisSessions <SessionData extends Record<string, string|boolean|number>> 
 				ttlAutopurge: false
 			});
 			// Setup the Redis subscriber to listen for changes
-			if (redisSessionsOptions.options && redisSessionsOptions.options.url) { this.redissub = createClient(redisSessionsOptions.options); } else {
+			if (redisSessionsOptions.options && redisSessionsOptions.options.urls) {
+				// Use Redis Cluster if urls array is provided
+				const { urls, ...clusterOptions } = redisSessionsOptions.options;
+				this.redissub = createCluster({
+					rootNodes: urls.map(url => ({ url })),
+					defaults: clusterOptions
+				});
+			} else if (redisSessionsOptions.options && redisSessionsOptions.options.url) {
+				this.redissub = createClient(redisSessionsOptions.options);
+			} else {
 				this.redissub = createClient(_.merge(redisSessionsOptions.options ?? {}, { socket: { port: redisSessionsOptions.port ?? 6379, host: redisSessionsOptions.host ?? "127.0.0.1" } }));
 			}
 			// Setup the subscriber
@@ -787,7 +803,7 @@ class RedisSessions <SessionData extends Record<string, string|boolean|number>> 
 	private async subscribe() {
 		if (this.redissub) {
 			await this.redissub.connect();
-			await this.redissub.subscribe(`${this.redisns}cache`, (message, _channel) => {
+			await this.redissub.subscribe(`${this.redisns}cache`, (message: string, _channel: string) => {
 				if (this.sessionCache) {
 					this.sessionCache.delete(message);
 				}
