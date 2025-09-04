@@ -10,6 +10,7 @@
     "node": ">=16.0.0"
   },
   "scripts": {
+    "prepare": "npm run build",
     "prebuild": "npm run lint",
     "build": "npm run build:ts",
     "build:ts": "tsc --declaration",

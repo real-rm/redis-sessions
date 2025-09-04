@@ -91,6 +91,32 @@ rs = new RedisSessions<{
 rsapp = "myapp";
 ```
 
+### Redis Cluster Support
+
+Redis-sessions supports Redis Cluster by providing an array of cluster node URLs in the `options.urls` parameter:
+
+```javascript
+import RedisSessions from "redis-sessions"
+
+// Configure for Redis Cluster
+const rs = new RedisSessions({
+  options: {
+    urls: [
+      'redis://node1.cluster.example.com:7000',
+      'redis://node2.cluster.example.com:7001',
+      'redis://node3.cluster.example.com:7002'
+    ]
+    // Any other Redis client options can be added here
+  },
+  namespace: 'myapp',
+  cachetime: 600
+});
+```
+
+When `options.urls` is provided, redis-sessions will use `createCluster` instead of `createClient` from the node-redis library. The URLs array should contain the connection strings for the Redis cluster nodes. You don't need to specify every node in the cluster - 3 nodes should be sufficient for reliable cluster discovery.
+
+All other redis-sessions functionality works the same way with clusters as with single Redis instances.
+
 ### Create a session
 
 Parameters:
